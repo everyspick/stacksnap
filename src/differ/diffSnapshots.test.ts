@@ -51,6 +51,7 @@ describe('diffSnapshots', () => {
     const to = makeSnapshot('snap-2', [{ name: 'node', version: '18.0.0' }]);
     const diff = diffSnapshots(from, to);
     expect(diff.hasChanges).toBe(false);
+    expect(diff.diffs).toHaveLength(0);
   });
 
   it('formatDiff returns no-change message when nothing changed', () => {
@@ -68,5 +69,20 @@ describe('diffSnapshots', () => {
     expect(output).toContain('~');
     expect(output).toContain('18.0.0');
     expect(output).toContain('20.0.0');
+  });
+
+  it('formatDiff includes + and - symbols for added and removed tools', () => {
+    const from = makeSnapshot('snap-1', [
+      { name: 'node', version: '18.0.0' },
+      { name: 'yarn', version: '1.22.0' },
+    ]);
+    const to = makeSnapshot('snap-2', [
+      { name: 'node', version: '18.0.0' },
+      { name: 'bun', version: '1.0.0' },
+    ]);
+    const diff = diffSnapshots(from, to);
+    const output = formatDiff(diff);
+    expect(output).toContain('+');
+    expect(output).toContain('-');
   });
 });
