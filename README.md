@@ -40,6 +40,12 @@ stacksnap export --output my-stack.json
 stacksnap inspect my-stack.json
 ```
 
+**Compare two snapshots:**
+
+```bash
+stacksnap diff snapshot-a.json snapshot-b.json
+```
+
 **Example output:**
 
 ```json
