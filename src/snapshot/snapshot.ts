@@ -43,5 +43,14 @@ export function loadSnapshot(filePath: string): Snapshot {
     throw new Error(`Snapshot file not found: ${resolved}`);
   }
   const raw = fs.readFileSync(resolved, 'utf-8');
-  return JSON.parse(raw) as Snapshot;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`Failed to parse snapshot file: ${resolved}`);
+  }
+  if (typeof parsed !== 'object' || parsed === null || !('version' in parsed) || !('stack' in parsed)) {
+    throw new Error(`Invalid snapshot format in file: ${resolved}`);
+  }
+  return parsed as Snapshot;
 }
