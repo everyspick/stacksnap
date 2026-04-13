@@ -1,20 +1,19 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { Snapshot } from '../detector/types';
-import { serializeSnapshot } from '../snapshot/snapshot';
-
-export type ExportFormat = 'json' | 'markdown' | 'text';
+import { ExportFormat } from '../cli/types';
+import * as fs from 'fs';
 
 export function exportAsJson(snapshot: Snapshot): string {
-  return JSON.stringify(serializeSnapshot(snapshot), null, 2);
+  return JSON.stringify(snapshot, null, 2);
 }
 
 export function exportAsMarkdown(snapshot: Snapshot): string {
   const lines: string[] = [
     `# Stack Snapshot`,
     ``,
-    `**Created:** ${new Date(snapshot.createdAt).toISOString()}`,
-    `**Host:** ${snapshot.host ?? 'unknown'}`,
+    `**ID:** ${snapshot.id}`,
+    `**Created:** ${snapshot.createdAt}`,
+    `**Host:** ${snapshot.metadata?.hostname ?? 'unknown'}`,
+    `**Platform:** ${snapshot.metadata?.platform ?? 'unknown'}`,
     ``,
     `## Tools`,
     ``,
@@ -30,14 +29,15 @@ export function exportAsMarkdown(snapshot: Snapshot): string {
 export function exportAsText(snapshot: Snapshot): string {
   const lines: string[] = [
     `Stack Snapshot`,
-    `Created: ${new Date(snapshot.createdAt).toISOString()}`,
-    `Host: ${snapshot.host ?? 'unknown'}`,
+    `ID: ${snapshot.id}`,
+    `Created: ${snapshot.createdAt}`,
     ``,
     `Tools:`,
   ];
   for (const tool of snapshot.tools) {
-    const ver = tool.version ? `v${tool.version}` : 'no version';
-    lines.push(`  ${tool.name} (${ver}) [${tool.category ?? 'unknown'}]`);
+    const ver = tool.version ?? 'n/a';
+    const cat = tool.category ?? 'unknown';
+    lines.push(`  - ${tool.name} @ ${ver} [${cat}]`);
   }
   return lines.join('\n');
 }
@@ -48,12 +48,19 @@ export function exportSnapshot(
   outputPath?: string
 ): string {
   let content: string;
-  if (format === 'json') content = exportAsJson(snapshot);
-  else if (format === 'markdown') content = exportAsMarkdown(snapshot);
-  else content = exportAsText(snapshot);
-
+  switch (format) {
+    case 'json':
+      content = exportAsJson(snapshot);
+      break;
+    case 'markdown':
+      content = exportAsMarkdown(snapshot);
+      break;
+    case 'text':
+    default:
+      content = exportAsText(snapshot);
+      break;
+  }
   if (outputPath) {
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     fs.writeFileSync(outputPath, content, 'utf-8');
   }
   return content;
