@@ -1,78 +1,78 @@
-import { exportAsJson, exportAsMarkdown, exportAsEnv, exportSnapshot } from "./exportSnapshot";
-import { Snapshot } from "../detector/types";
-import * as fs from "fs";
-import * as path from "path";
+import { exportAsJson, exportAsMarkdown, exportAsText, exportSnapshot } from './exportSnapshot';
+import { Snapshot } from '../detector/types';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
-const mockSnapshot: Snapshot = {
-  capturedAt: new Date("2024-01-15T10:00:00Z").toISOString(),
-  platform: "darwin",
-  tools: [
-    { name: "node", version: "20.11.0", path: "/usr/local/bin/node" },
-    { name: "git", version: "2.43.0", path: "/usr/bin/git" },
-    { name: "docker", version: undefined, path: undefined },
-  ],
-};
+function makeSnapshot(): Snapshot {
+  return {
+    id: 'snap-001',
+    createdAt: 1700000000000,
+    host: 'test-machine',
+    tools: [
+      { name: 'node', version: '20.0.0', category: 'runtime' },
+      { name: 'git', version: '2.42.0', category: 'vcs' },
+      { name: 'docker', version: undefined, category: 'container' },
+    ],
+  };
+}
 
-describe("exportAsJson", () => {
-  it("returns valid JSON string", () => {
-    const result = exportAsJson(mockSnapshot);
-    expect(() => JSON.parse(result)).not.toThrow();
-  });
-
-  it("includes all tools in output", () => {
-    const result = exportAsJson(mockSnapshot);
+describe('exportAsJson', () => {
+  it('returns valid JSON string', () => {
+    const result = exportAsJson(makeSnapshot());
     const parsed = JSON.parse(result);
     expect(parsed.tools).toHaveLength(3);
+    expect(parsed.host).toBe('test-machine');
   });
 });
 
-describe("exportAsMarkdown", () => {
-  it("contains markdown table header", () => {
-    const result = exportAsMarkdown(mockSnapshot);
-    expect(result).toContain("| Tool | Version | Path |");
+describe('exportAsMarkdown', () => {
+  it('includes markdown table header', () => {
+    const result = exportAsMarkdown(makeSnapshot());
+    expect(result).toContain('| Name | Version | Category |');
+    expect(result).toContain('| node | 20.0.0 | runtime |');
+    expect(result).toContain('| docker | n/a | container |');
   });
 
-  it("shows 'not found' for missing versions", () => {
-    const result = exportAsMarkdown(mockSnapshot);
-    expect(result).toContain("not found");
-  });
-
-  it("includes platform info", () => {
-    const result = exportAsMarkdown(mockSnapshot);
-    expect(result).toContain("darwin");
+  it('includes snapshot metadata', () => {
+    const result = exportAsMarkdown(makeSnapshot());
+    expect(result).toContain('**Host:** test-machine');
+    expect(result).toContain('# Stack Snapshot');
   });
 });
 
-describe("exportAsEnv", () => {
-  it("formats tool versions as env vars", () => {
-    const result = exportAsEnv(mockSnapshot);
-    expect(result).toContain("STACK_NODE_VERSION=20.11.0");
-    expect(result).toContain("STACK_GIT_VERSION=2.43.0");
+describe('exportAsText', () => {
+  it('formats tools as indented list', () => {
+    const result = exportAsText(makeSnapshot());
+    expect(result).toContain('  node (v20.0.0) [runtime]');
+    expect(result).toContain('  docker (no version) [container]');
   });
 
-  it("skips tools without a version", () => {
-    const result = exportAsEnv(mockSnapshot);
-    expect(result).not.toContain("STACK_DOCKER_VERSION");
+  it('includes host info', () => {
+    const result = exportAsText(makeSnapshot());
+    expect(result).toContain('Host: test-machine');
   });
 });
 
-describe("exportSnapshot", () => {
-  it("throws on unsupported format", () => {
-    expect(() => exportSnapshot(mockSnapshot, "xml" as any)).toThrow(
-      "Unsupported export format: xml"
-    );
+describe('exportSnapshot', () => {
+  it('writes json to file', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stacksnap-'));
+    const outPath = path.join(tmpDir, 'out.json');
+    exportSnapshot(makeSnapshot(), 'json', outPath);
+    const content = fs.readFileSync(outPath, 'utf-8');
+    expect(JSON.parse(content).id).toBe('snap-001');
   });
 
-  it("writes file to disk when outputPath is provided", () => {
-    const tmpPath = path.join("/tmp", "stacksnap-test-export.md");
-    exportSnapshot(mockSnapshot, "markdown", tmpPath);
-    expect(fs.existsSync(tmpPath)).toBe(true);
-    fs.unlinkSync(tmpPath);
+  it('writes markdown to file', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stacksnap-'));
+    const outPath = path.join(tmpDir, 'out.md');
+    exportSnapshot(makeSnapshot(), 'markdown', outPath);
+    const content = fs.readFileSync(outPath, 'utf-8');
+    expect(content).toContain('# Stack Snapshot');
   });
 
-  it("returns content without writing if no outputPath", () => {
-    const result = exportSnapshot(mockSnapshot, "json");
-    expect(result).toBeTruthy();
-    expect(() => JSON.parse(result)).not.toThrow();
+  it('returns content without writing when no path given', () => {
+    const result = exportSnapshot(makeSnapshot(), 'text');
+    expect(result).toContain('Stack Snapshot');
   });
 });

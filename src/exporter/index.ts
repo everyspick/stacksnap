@@ -1,3 +1,3 @@
-export { exportAsJson, exportAsMarkdown, exportAsEnv, exportSnapshot } from './exportSnapshot';
+export { exportSnapshot, exportAsJson, exportAsMarkdown, exportAsText } from './exportSnapshot';
+export type { ExportFormat } from './exportSnapshot';
 export { exportDiffAsMarkdown, exportFullDiff } from './exportDiff';
-export type { DiffExportFormat, DiffExportOptions } from './exportDiff';

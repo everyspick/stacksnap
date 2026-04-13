@@ -1,76 +1,63 @@
 import { exportDiffAsMarkdown, exportFullDiff } from './exportDiff';
-import { DiffResult } from '../differ/diffSnapshots';
+import { SnapshotDiff } from '../differ/diffSnapshots';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-function makeDiff(overrides: Partial<DiffResult> = {}): DiffResult {
+function makeDiff(): SnapshotDiff {
   return {
-    snapshotA: 'snap-a',
-    snapshotB: 'snap-b',
-    added: [],
-    removed: [],
-    changed: [],
-    unchanged: [],
-    ...overrides,
+    added: [{ name: 'bun', version: '1.0.0', category: 'runtime' }],
+    removed: [{ name: 'deno', version: '1.38.0', category: 'runtime' }],
+    changed: [
+      {
+        tool: 'node',
+        from: '18.0.0',
+        to: '20.0.0',
+      },
+    ],
+    unchanged: [{ name: 'git', version: '2.42.0', category: 'vcs' }],
   };
 }
 
 describe('exportDiffAsMarkdown', () => {
-  it('renders header with snapshot names', () => {
+  it('includes added tools section', () => {
     const result = exportDiffAsMarkdown(makeDiff());
-    expect(result).toContain('**From:** snap-a');
-    expect(result).toContain('**To:** snap-b');
+    expect(result).toContain('## Added');
+    expect(result).toContain('bun');
   });
 
-  it('shows no differences message when empty', () => {
+  it('includes removed tools section', () => {
     const result = exportDiffAsMarkdown(makeDiff());
-    expect(result).toContain('_No differences found._');
+    expect(result).toContain('## Removed');
+    expect(result).toContain('deno');
   });
 
-  it('lists added tools', () => {
-    const diff = makeDiff({ added: [{ name: 'node', version: '20.0.0' }] });
-    const result = exportDiffAsMarkdown(diff);
-    expect(result).toContain('## Added Tools');
-    expect(result).toContain('`node` 20.0.0');
+  it('includes changed tools with from/to versions', () => {
+    const result = exportDiffAsMarkdown(makeDiff());
+    expect(result).toContain('## Changed');
+    expect(result).toContain('node');
+    expect(result).toContain('18.0.0');
+    expect(result).toContain('20.0.0');
   });
 
-  it('lists removed tools', () => {
-    const diff = makeDiff({ removed: [{ name: 'yarn', version: '1.22.0' }] });
-    const result = exportDiffAsMarkdown(diff);
-    expect(result).toContain('## Removed Tools');
-    expect(result).toContain('`yarn`');
-  });
-
-  it('lists changed tools with version arrows', () => {
-    const diff = makeDiff({
-      changed: [{ tool: 'npm', fromVersion: '8.0.0', toVersion: '10.0.0' }],
-    });
-    const result = exportDiffAsMarkdown(diff);
-    expect(result).toContain('## Changed Tools');
-    expect(result).toContain('`npm`: 8.0.0 → 10.0.0');
+  it('shows unchanged count', () => {
+    const result = exportDiffAsMarkdown(makeDiff());
+    expect(result).toContain('1 unchanged');
   });
 });
 
 describe('exportFullDiff', () => {
-  it('returns json format', () => {
-    const diff = makeDiff({ added: [{ name: 'go', version: '1.21' }] });
-    const result = exportFullDiff(diff, { format: 'json' });
-    const parsed = JSON.parse(result);
-    expect(parsed.added).toHaveLength(1);
+  it('writes markdown diff to file', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stacksnap-diff-'));
+    const outPath = path.join(tmpDir, 'diff.md');
+    exportFullDiff(makeDiff(), outPath);
+    const content = fs.readFileSync(outPath, 'utf-8');
+    expect(content).toContain('## Added');
   });
 
-  it('returns markdown format', () => {
-    const diff = makeDiff();
-    const result = exportFullDiff(diff, { format: 'markdown' });
-    expect(result).toContain('# Stack Diff Report');
-  });
-
-  it('writes to file when outputPath provided', () => {
-    const tmpFile = path.join(os.tmpdir(), `stacksnap-diff-test-${Date.now()}.md`);
-    const diff = makeDiff();
-    exportFullDiff(diff, { format: 'markdown', outputPath: tmpFile });
-    expect(fs.existsSync(tmpFile)).toBe(true);
-    fs.unlinkSync(tmpFile);
+  it('returns content string', () => {
+    const result = exportFullDiff(makeDiff());
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(0);
   });
 });
