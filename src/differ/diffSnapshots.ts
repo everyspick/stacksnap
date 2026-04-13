@@ -1,71 +1,98 @@
-import { Snapshot, ToolInfo } from '../detector/types';
+import { Snapshot, ToolEntry } from '../detector/types';
 
 export interface ToolDiff {
   tool: string;
   status: 'added' | 'removed' | 'changed' | 'unchanged';
-  from?: string;
-  to?: string;
+  oldVersion?: string;
+  newVersion?: string;
+  category?: string;
 }
 
 export interface SnapshotDiff {
-  timestamp: string;
-  fromSnapshot: string;
-  toSnapshot: string;
-  diffs: ToolDiff[];
-  hasChanges: boolean;
+  added: ToolDiff[];
+  removed: ToolDiff[];
+  changed: ToolDiff[];
+  unchanged: ToolDiff[];
+  summary: {
+    total: number;
+    added: number;
+    removed: number;
+    changed: number;
+    unchanged: number;
+  };
 }
 
-export function diffSnapshots(from: Snapshot, to: Snapshot): SnapshotDiff {
-  const diffs: ToolDiff[] = [];
-  const fromMap = new Map<string, ToolInfo>(from.tools.map((t) => [t.name, t]));
-  const toMap = new Map<string, ToolInfo>(to.tools.map((t) => [t.name, t]));
+export function diffSnapshots(base: Snapshot, target: Snapshot): SnapshotDiff {
+  const baseMap = new Map<string, ToolEntry>(base.tools.map(t => [t.name, t]));
+  const targetMap = new Map<string, ToolEntry>(target.tools.map(t => [t.name, t]));
 
-  for (const [name, tool] of fromMap) {
-    if (!toMap.has(name)) {
-      diffs.push({ tool: name, status: 'removed', from: tool.version });
+  const added: ToolDiff[] = [];
+  const removed: ToolDiff[] = [];
+  const changed: ToolDiff[] = [];
+  const unchanged: ToolDiff[] = [];
+
+  for (const [name, tool] of targetMap) {
+    if (!baseMap.has(name)) {
+      added.push({ tool: name, status: 'added', newVersion: tool.version, category: tool.category });
     } else {
-      const toTool = toMap.get(name)!;
-      if (tool.version !== toTool.version) {
-        diffs.push({ tool: name, status: 'changed', from: tool.version, to: toTool.version });
+      const baseTool = baseMap.get(name)!;
+      if (baseTool.version !== tool.version) {
+        changed.push({
+          tool: name,
+          status: 'changed',
+          oldVersion: baseTool.version,
+          newVersion: tool.version,
+          category: tool.category,
+        });
       } else {
-        diffs.push({ tool: name, status: 'unchanged', from: tool.version, to: toTool.version });
+        unchanged.push({ tool: name, status: 'unchanged', newVersion: tool.version, category: tool.category });
       }
     }
   }
 
-  for (const [name, tool] of toMap) {
-    if (!fromMap.has(name)) {
-      diffs.push({ tool: name, status: 'added', to: tool.version });
+  for (const [name, tool] of baseMap) {
+    if (!targetMap.has(name)) {
+      removed.push({ tool: name, status: 'removed', oldVersion: tool.version, category: tool.category });
     }
   }
 
-  diffs.sort((a, b) => a.tool.localeCompare(b.tool));
-
   return {
-    timestamp: new Date().toISOString(),
-    fromSnapshot: from.id,
-    toSnapshot: to.id,
-    diffs,
-    hasChanges: diffs.some((d) => d.status !== 'unchanged'),
+    added,
+    removed,
+    changed,
+    unchanged,
+    summary: {
+      total: added.length + removed.length + changed.length + unchanged.length,
+      added: added.length,
+      removed: removed.length,
+      changed: changed.length,
+      unchanged: unchanged.length,
+    },
   };
 }
 
 export function formatDiff(diff: SnapshotDiff): string {
-  if (!diff.hasChanges) {
-    return 'No changes detected between snapshots.\n';
+  const lines: string[] = [];
+  lines.push('=== Snapshot Diff ===');
+  lines.push(`Added: ${diff.summary.added}  Removed: ${diff.summary.removed}  Changed: ${diff.summary.changed}  Unchanged: ${diff.summary.unchanged}`);
+  lines.push('');
+
+  if (diff.added.length > 0) {
+    lines.push('+ Added:');
+    diff.added.forEach(d => lines.push(`  + ${d.tool} ${d.newVersion ?? '(unknown)'}${d.category ? ` [${d.category}]` : ''}`));
   }
 
-  const lines: string[] = [
-    `Diff: ${diff.fromSnapshot} → ${diff.toSnapshot}`,
-    `Generated: ${diff.timestamp}`,
-    '',
-  ];
-
-  for (const d of diff.diffs) {
-    if (d.status === 'added') lines.push(`  + ${d.tool}: ${d.to}`);
-    else if (d.status === 'removed') lines.push(`  - ${d.tool}: ${d.from}`);
-    else if (d.status === 'changed') lines.push(`  ~ ${d.tool}: ${d.from} → ${d.to}`);
+  if (diff.removed.length > 0) {
+    lines.push('- Removed:');
+    diff.removed.forEach(d => lines.push(`  - ${d.tool} ${d.oldVersion ?? '(unknown)'}${d.category ? ` [${d.category}]` : ''}`));
   }
 
-  return lines.join('\n') + '\n';
+  if (diff.changed.length > 0) {
+    lines.push('~ Changed:');
+    diff.changed.forEach(d =>
+      lines.push(`  ~ ${d.tool}: ${d.oldVersion ?? '?'} → ${d.newVersion ?? '?'}${d.category ? ` [${d.category}]` : ''}`)
+    );
+  }
+
+  return lines.join('\n');
 }

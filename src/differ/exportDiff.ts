@@ -2,40 +2,30 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { SnapshotDiff, formatDiff } from './diffSnapshots';
 
-export type DiffExportFormat = 'json' | 'text';
-
-export function exportDiffAsJson(diff: SnapshotDiff): string {
-  return JSON.stringify(diff, null, 2);
+export function exportDiffAsJson(diff: SnapshotDiff, outputPath: string): void {
+  const json = JSON.stringify(diff, null, 2);
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, json, 'utf-8');
 }
 
-export function exportDiffAsText(diff: SnapshotDiff): string {
-  return formatDiff(diff);
+export function exportDiffAsText(diff: SnapshotDiff, outputPath: string): void {
+  const text = formatDiff(diff);
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, text, 'utf-8');
 }
 
 export function exportDiff(
   diff: SnapshotDiff,
-  format: DiffExportFormat = 'text',
-  outputPath?: string
-): string {
-  let content: string;
-
+  outputPath: string,
+  format: 'json' | 'text' = 'text'
+): void {
   switch (format) {
     case 'json':
-      content = exportDiffAsJson(diff);
+      exportDiffAsJson(diff, outputPath);
       break;
     case 'text':
     default:
-      content = exportDiffAsText(diff);
+      exportDiffAsText(diff, outputPath);
       break;
   }
-
-  if (outputPath) {
-    const dir = path.dirname(outputPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(outputPath, content, 'utf-8');
-  }
-
-  return content;
 }

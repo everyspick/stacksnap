@@ -1,88 +1,84 @@
-import { diffSnapshots, formatDiff } from './diffSnapshots';
+import { diffSnapshots, formatDiff, SnapshotDiff } from './diffSnapshots';
 import { Snapshot } from '../detector/types';
 
-const makeSnapshot = (id: string, tools: { name: string; version: string }[]): Snapshot => ({
-  id,
-  createdAt: new Date().toISOString(),
-  tools: tools.map((t) => ({ name: t.name, version: t.version, path: '/usr/bin/' + t.name })),
-  meta: { platform: 'linux', arch: 'x64', hostname: 'test' },
-});
+function makeSnapshot(tools: { name: string; version?: string; category?: string }[]): Snapshot {
+  return {
+    id: 'test-id',
+    createdAt: new Date().toISOString(),
+    tools: tools.map(t => ({ name: t.name, version: t.version, category: t.category })),
+    metadata: { hostname: 'localhost', platform: 'test', shell: '/bin/sh' },
+  };
+}
 
 describe('diffSnapshots', () => {
   it('detects added tools', () => {
-    const from = makeSnapshot('snap-1', [{ name: 'node', version: '18.0.0' }]);
-    const to = makeSnapshot('snap-2', [
-      { name: 'node', version: '18.0.0' },
-      { name: 'bun', version: '1.0.0' },
-    ]);
-    const diff = diffSnapshots(from, to);
-    expect(diff.hasChanges).toBe(true);
-    const added = diff.diffs.find((d) => d.tool === 'bun');
-    expect(added?.status).toBe('added');
-    expect(added?.to).toBe('1.0.0');
+    const base = makeSnapshot([{ name: 'node', version: '18.0.0' }]);
+    const target = makeSnapshot([{ name: 'node', version: '18.0.0' }, { name: 'bun', version: '1.0.0' }]);
+    const diff = diffSnapshots(base, target);
+    expect(diff.added).toHaveLength(1);
+    expect(diff.added[0].tool).toBe('bun');
+    expect(diff.summary.added).toBe(1);
   });
 
   it('detects removed tools', () => {
-    const from = makeSnapshot('snap-1', [
-      { name: 'node', version: '18.0.0' },
-      { name: 'yarn', version: '1.22.0' },
-    ]);
-    const to = makeSnapshot('snap-2', [{ name: 'node', version: '18.0.0' }]);
-    const diff = diffSnapshots(from, to);
-    expect(diff.hasChanges).toBe(true);
-    const removed = diff.diffs.find((d) => d.tool === 'yarn');
-    expect(removed?.status).toBe('removed');
-    expect(removed?.from).toBe('1.22.0');
+    const base = makeSnapshot([{ name: 'node', version: '18.0.0' }, { name: 'yarn', version: '1.22.0' }]);
+    const target = makeSnapshot([{ name: 'node', version: '18.0.0' }]);
+    const diff = diffSnapshots(base, target);
+    expect(diff.removed).toHaveLength(1);
+    expect(diff.removed[0].tool).toBe('yarn');
+    expect(diff.summary.removed).toBe(1);
   });
 
   it('detects changed versions', () => {
-    const from = makeSnapshot('snap-1', [{ name: 'node', version: '18.0.0' }]);
-    const to = makeSnapshot('snap-2', [{ name: 'node', version: '20.0.0' }]);
-    const diff = diffSnapshots(from, to);
-    expect(diff.hasChanges).toBe(true);
-    const changed = diff.diffs.find((d) => d.tool === 'node');
-    expect(changed?.status).toBe('changed');
-    expect(changed?.from).toBe('18.0.0');
-    expect(changed?.to).toBe('20.0.0');
+    const base = makeSnapshot([{ name: 'node', version: '18.0.0' }]);
+    const target = makeSnapshot([{ name: 'node', version: '20.0.0' }]);
+    const diff = diffSnapshots(base, target);
+    expect(diff.changed).toHaveLength(1);
+    expect(diff.changed[0].oldVersion).toBe('18.0.0');
+    expect(diff.changed[0].newVersion).toBe('20.0.0');
   });
 
-  it('reports no changes for identical snapshots', () => {
-    const from = makeSnapshot('snap-1', [{ name: 'node', version: '18.0.0' }]);
-    const to = makeSnapshot('snap-2', [{ name: 'node', version: '18.0.0' }]);
-    const diff = diffSnapshots(from, to);
-    expect(diff.hasChanges).toBe(false);
-    expect(diff.diffs).toHaveLength(0);
+  it('marks unchanged tools', () => {
+    const base = makeSnapshot([{ name: 'git', version: '2.40.0' }]);
+    const target = makeSnapshot([{ name: 'git', version: '2.40.0' }]);
+    const diff = diffSnapshots(base, target);
+    expect(diff.unchanged).toHaveLength(1);
+    expect(diff.summary.unchanged).toBe(1);
   });
 
-  it('formatDiff returns no-change message when nothing changed', () => {
-    const from = makeSnapshot('snap-1', [{ name: 'node', version: '18.0.0' }]);
-    const to = makeSnapshot('snap-2', [{ name: 'node', version: '18.0.0' }]);
-    const diff = diffSnapshots(from, to);
-    expect(formatDiff(diff)).toContain('No changes detected');
+  it('handles empty snapshots', () => {
+    const diff = diffSnapshots(makeSnapshot([]), makeSnapshot([]));
+    expect(diff.summary.total).toBe(0);
   });
 
-  it('formatDiff includes symbols for changes', () => {
-    const from = makeSnapshot('snap-1', [{ name: 'node', version: '18.0.0' }]);
-    const to = makeSnapshot('snap-2', [{ name: 'node', version: '20.0.0' }]);
-    const diff = diffSnapshots(from, to);
+  it('computes correct summary totals', () => {
+    const base = makeSnapshot([{ name: 'node', version: '18.0.0' }, { name: 'yarn', version: '1.22.0' }]);
+    const target = makeSnapshot([{ name: 'node', version: '20.0.0' }, { name: 'bun', version: '1.0.0' }]);
+    const diff = diffSnapshots(base, target);
+    expect(diff.summary.changed).toBe(1);
+    expect(diff.summary.removed).toBe(1);
+    expect(diff.summary.added).toBe(1);
+    expect(diff.summary.total).toBe(3);
+  });
+});
+
+describe('formatDiff', () => {
+  it('includes section headers for non-empty sections', () => {
+    const base = makeSnapshot([{ name: 'node', version: '18.0.0' }]);
+    const target = makeSnapshot([{ name: 'node', version: '20.0.0' }, { name: 'bun', version: '1.0.0' }]);
+    const diff = diffSnapshots(base, target);
     const output = formatDiff(diff);
-    expect(output).toContain('~');
+    expect(output).toContain('+ Added:');
+    expect(output).toContain('~ Changed:');
+    expect(output).toContain('bun');
     expect(output).toContain('18.0.0');
     expect(output).toContain('20.0.0');
   });
 
-  it('formatDiff includes + and - symbols for added and removed tools', () => {
-    const from = makeSnapshot('snap-1', [
-      { name: 'node', version: '18.0.0' },
-      { name: 'yarn', version: '1.22.0' },
-    ]);
-    const to = makeSnapshot('snap-2', [
-      { name: 'node', version: '18.0.0' },
-      { name: 'bun', version: '1.0.0' },
-    ]);
-    const diff = diffSnapshots(from, to);
+  it('includes summary line', () => {
+    const diff = diffSnapshots(makeSnapshot([]), makeSnapshot([]));
     const output = formatDiff(diff);
-    expect(output).toContain('+');
-    expect(output).toContain('-');
+    expect(output).toContain('Added: 0');
+    expect(output).toContain('Removed: 0');
   });
 });
