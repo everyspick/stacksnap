@@ -35,15 +35,11 @@ export async function startWatching(options: WatchOptions): Promise<WatchHandle>
       if (lastSnapshot !== null) {
         const changed = hasStackChanged(lastSnapshot, snapshot);
         if (changed) {
-          const filename = `snapshot-${snapshot.timestamp}.json`;
-          const filepath = path.join(outputDir, filename);
-          await saveSnapshot(snapshot, filepath);
+          await saveSnapshotToDir(snapshot, outputDir);
           onChange?.(lastSnapshot, snapshot);
         }
       } else {
-        const filename = `snapshot-${snapshot.timestamp}.json`;
-        const filepath = path.join(outputDir, filename);
-        await saveSnapshot(snapshot, filepath);
+        await saveSnapshotToDir(snapshot, outputDir);
       }
 
       lastSnapshot = snapshot;
@@ -62,6 +58,15 @@ export async function startWatching(options: WatchOptions): Promise<WatchHandle>
     stop: () => { running = false; },
     isRunning: () => running,
   };
+}
+
+/**
+ * Saves a snapshot to the given directory using a timestamp-based filename.
+ */
+async function saveSnapshotToDir(snapshot: StackSnapshot, outputDir: string): Promise<void> {
+  const filename = `snapshot-${snapshot.timestamp}.json`;
+  const filepath = path.join(outputDir, filename);
+  await saveSnapshot(snapshot, filepath);
 }
 
 export function hasStackChanged(prev: StackSnapshot, next: StackSnapshot): boolean {
