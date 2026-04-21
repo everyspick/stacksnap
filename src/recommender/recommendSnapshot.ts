@@ -57,3 +57,17 @@ export function formatRecommendations(result: RecommendationResult): string {
 
   return lines.join('\n');
 }
+
+/**
+ * Groups recommendations by category and returns a summary count per category.
+ * Useful for dashboards or compact reporting views.
+ */
+export function summarizeByCategory(result: RecommendationResult): Record<string, number> {
+  const summary: Record<string, number> = {};
+
+  for (const rec of result.recommendations) {
+    summary[rec.category] = (summary[rec.category] ?? 0) + 1;
+  }
+
+  return summary;
+}
